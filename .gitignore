@@ -1,0 +1,62 @@
+# Byte-compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Virtual environments and pixi state
+.venv/
+venv/
+env/
+.pixi/
+
+# Test, coverage, and type-checker output
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Logs and local runtime output
+*.log
+logs/
+tmp/
+temp/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# IDE and OS files
+.DS_Store
+.idea/
+.vscode/
+
+# MuJoCo and experiment outputs
+*.mjb
+*.stl
+*.urdf
+*.usd
+*.mp4
+*.mov
+*.avi
+*.npy
+*.npz
+runs/
+outputs/
+artifacts/
+checkpoints/
+wandb/

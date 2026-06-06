@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "locomaniformer"
+version = "0.1.0"
+description = "Locomotion and manipulation experiments built around MuJoCo tooling."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "rich>=13.7",
+    "typer>=0.12",
+]
+
+[project.scripts]
+locomaniformer = "locomaniformer.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/locomaniformer"]
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "linux-64"]
+
+[tool.pixi.dependencies]
+python = ">=3.11,<3.13"
+pip = ">=24.0"
+hatchling = ">=1.25"
+pytest = ">=8.3"
+ruff = ">=0.8"
+
+[tool.pixi.pypi-dependencies]
+locomaniformer = { path = ".", editable = true }
+moojoco = { path = "../moojoco", editable = true }
+
+[tool.pixi.tasks]
+cli = "locomaniformer"
+test = "pytest"
+lint = "ruff check src tests"
+format = "ruff format src tests"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

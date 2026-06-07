@@ -147,6 +147,16 @@ class RobotFamilySampler:
         is_wheeled = family in (RobotFamily.WHEELED_BIPED, RobotFamily.WHEELED_QUADRUPED)
         templates = self._leg_joint_templates(rng, family)
 
+        if self.config.parameter_range_preset == ParameterRangePreset.COMMERCIAL_SURROGATE:
+            return self._sample_symmetric_limb_pairs(
+                rng=rng,
+                family=family,
+                body=body,
+                scale=scale,
+                physics=physics,
+                templates=templates,
+            )
+
         x_positions = (-body.length * 0.28, body.length * 0.28) if is_quad else (0.0,)
         y_positions = (-body.width * 0.62, body.width * 0.62)
         limbs: list[LimbSpec] = []
@@ -172,6 +182,61 @@ class RobotFamilySampler:
                 joints = tuple(self._joint_for(template, physics) for template in templates)
                 foot = None if is_wheeled else self._sample_foot(rng, scale, physics)
                 wheel = self._sample_wheel(rng, scale) if is_wheeled else None
+                limbs.append(
+                    LimbSpec(
+                        name=name,
+                        side=side,
+                        mount_label=mount_label,
+                        mount_pos=(x_pos + perturb, y_pos, -body.height * 0.18),
+                        upper=upper,
+                        lower=lower,
+                        joints=joints,
+                        foot=foot,
+                        wheel=wheel,
+                        symmetry_group=f"{mount_label}_pair",
+                    )
+                )
+        return tuple(limbs)
+
+    def _sample_symmetric_limb_pairs(
+        self,
+        *,
+        rng: np.random.Generator,
+        family: RobotFamily,
+        body: BodySpec,
+        scale: float,
+        physics: PhysicsSpec,
+        templates: tuple[str, ...],
+    ) -> tuple[LimbSpec, ...]:
+        is_quad = family in (RobotFamily.QUADRUPED, RobotFamily.WHEELED_QUADRUPED)
+        is_wheeled = family in (RobotFamily.WHEELED_BIPED, RobotFamily.WHEELED_QUADRUPED)
+        x_positions = (-body.length * 0.28, body.length * 0.28) if is_quad else (0.0,)
+        y_abs = body.width * 0.62
+        limbs: list[LimbSpec] = []
+
+        for x_pos in x_positions:
+            mount_label = ("front" if x_pos > 0 else "rear") if is_quad else "mid"
+            perturb = self._uniform(rng, -0.012, 0.012) * scale
+            upper_length = self._uniform(rng, 0.22, 0.42) * scale
+            lower_length = self._uniform(rng, 0.20, 0.40) * scale
+            radius = self._uniform(rng, 0.025, 0.055) * scale
+            upper = SegmentSpec(
+                length=upper_length,
+                radius=radius,
+                mass=max(0.35, upper_length * radius * physics.density * 0.22),
+            )
+            lower_radius = radius * self._uniform(rng, 0.82, 1.0)
+            lower = SegmentSpec(
+                length=lower_length,
+                radius=lower_radius,
+                mass=max(0.25, lower_length * lower_radius * physics.density * 0.18),
+            )
+            joints = tuple(self._joint_for(template, physics) for template in templates)
+            foot = None if is_wheeled else self._sample_foot(rng, scale, physics)
+            wheel = self._sample_wheel(rng, scale) if is_wheeled else None
+
+            for side, y_pos in (("right", -y_abs), ("left", y_abs)):
+                name = f"{mount_label}_{side}_leg" if is_quad else f"{side}_leg"
                 limbs.append(
                     LimbSpec(
                         name=name,

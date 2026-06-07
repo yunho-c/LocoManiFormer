@@ -207,10 +207,13 @@ Broader non-default presets can include:
 - 4-DoF leg: hip yaw, hip roll, hip pitch, knee pitch.
 - 5-DoF leg: 4-DoF leg plus ankle pitch.
 
-The default sampler should choose commercial-surrogate templates per family,
-then apply small left/right/front/back perturbations. Large asymmetry and
-unusual extra axes should be allowed only in `broad`, `heldout`, or `extreme`
-presets.
+The default sampler should choose commercial-surrogate templates per family and
+construct left/right limb pairs by mirroring a shared pair spec. Within each
+left/right pair, segment dimensions, masses, joint ranges, actuator layout, and
+terminal foot or wheel modules should match exactly; mount positions should keep
+the same `x` and `z` coordinates with opposite `y` coordinates. Large asymmetry
+and unusual extra axes should be allowed only in `broad`, `heldout`, or
+`extreme` presets.
 
 ### Feet
 

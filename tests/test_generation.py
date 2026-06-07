@@ -72,6 +72,42 @@ def test_default_biped_uses_commercial_ten_actuator_layout() -> None:
     assert {len(limb.joints) for limb in artifact.morphology_spec.limbs} == {5}
 
 
+def test_default_quadruped_left_right_pairs_are_mirrored() -> None:
+    spec = RobotFamilySampler(RobotGenerationConfig.conservative()).sample(
+        seed=16,
+        family=RobotFamily.QUADRUPED,
+    )
+
+    for mount_label in ("rear", "front"):
+        right = next(limb for limb in spec.limbs if limb.name == f"{mount_label}_right_leg")
+        left = next(limb for limb in spec.limbs if limb.name == f"{mount_label}_left_leg")
+
+        assert right.upper == left.upper
+        assert right.lower == left.lower
+        assert right.joints == left.joints
+        assert right.foot == left.foot
+        assert right.mount_pos[0] == left.mount_pos[0]
+        assert right.mount_pos[1] == -left.mount_pos[1]
+        assert right.mount_pos[2] == left.mount_pos[2]
+
+
+def test_default_biped_left_right_pair_is_mirrored() -> None:
+    spec = RobotFamilySampler(RobotGenerationConfig.conservative()).sample(
+        seed=17,
+        family=RobotFamily.BIPED,
+    )
+    right = next(limb for limb in spec.limbs if limb.name == "right_leg")
+    left = next(limb for limb in spec.limbs if limb.name == "left_leg")
+
+    assert right.upper == left.upper
+    assert right.lower == left.lower
+    assert right.joints == left.joints
+    assert right.foot == left.foot
+    assert right.mount_pos[0] == left.mount_pos[0]
+    assert right.mount_pos[1] == -left.mount_pos[1]
+    assert right.mount_pos[2] == left.mount_pos[2]
+
+
 def test_default_leg_joints_are_hinges_not_ball_joints() -> None:
     spec = RobotFamilySampler(RobotGenerationConfig.conservative()).sample(
         seed=14,

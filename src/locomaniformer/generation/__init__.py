@@ -1,7 +1,11 @@
 """Procedural robot generation utilities."""
 
 from locomaniformer.generation.artifacts import GeneratedRobotArtifact, generate_robot_artifact
-from locomaniformer.generation.config import RobotFamily, RobotGenerationConfig
+from locomaniformer.generation.config import (
+    ParameterRangePreset,
+    RobotFamily,
+    RobotGenerationConfig,
+)
 from locomaniformer.generation.mjcf_robot import MJCFGeneratedRobot
 from locomaniformer.generation.preview import (
     PreviewCollage,
@@ -16,6 +20,7 @@ __all__ = [
     "MJCFGeneratedRobot",
     "MorphologyValidator",
     "PreviewCollage",
+    "ParameterRangePreset",
     "RobotFamily",
     "RobotFamilySampler",
     "RobotGenerationConfig",

@@ -10,6 +10,7 @@ from rich.console import Console
 
 from locomaniformer import __version__
 from locomaniformer.generation import (
+    ParameterRangePreset,
     RobotFamily,
     RobotGenerationConfig,
     create_preview_collage,
@@ -77,6 +78,10 @@ def generate_robot(
             help="Allow simple torso-mounted manipulators for this generated robot.",
         ),
     ] = False,
+    preset: Annotated[
+        ParameterRangePreset,
+        typer.Option("--preset", help="Robot generation distribution preset."),
+    ] = ParameterRangePreset.COMMERCIAL_SURROGATE,
     require_mjx: Annotated[
         bool,
         typer.Option(
@@ -86,7 +91,8 @@ def generate_robot(
     ] = False,
 ) -> None:
     """Generate one robot artifact and write JSON/XML outputs."""
-    config = RobotGenerationConfig.conservative(
+    config = _generation_config(
+        preset=preset,
         allowed_families=(family,) if family is not None else None,
         require_mjx=require_mjx,
         manipulator_probability=1.0 if manipulators else 0.0,
@@ -132,9 +138,13 @@ def generate_manifest(
         Path,
         typer.Option("--manifest", help="JSONL manifest path."),
     ] = Path("artifacts/manifest.jsonl"),
+    preset: Annotated[
+        ParameterRangePreset,
+        typer.Option("--preset", help="Robot generation distribution preset."),
+    ] = ParameterRangePreset.COMMERCIAL_SURROGATE,
 ) -> None:
     """Generate a small deterministic robot manifest."""
-    config = RobotGenerationConfig.conservative()
+    config = _generation_config(preset=preset)
     artifacts = []
     for seed in range(start_seed, start_seed + count):
         artifact = generate_robot_artifact(config, seed=seed)
@@ -183,9 +193,14 @@ def generate_preview(
             help="Allow simple torso-mounted manipulators in generated robots.",
         ),
     ] = False,
+    preset: Annotated[
+        ParameterRangePreset,
+        typer.Option("--preset", help="Robot generation distribution preset."),
+    ] = ParameterRangePreset.COMMERCIAL_SURROGATE,
 ) -> None:
     """Render generated robots into a regular-grid PNG collage."""
-    config = RobotGenerationConfig.conservative(
+    config = _generation_config(
+        preset=preset,
         allowed_families=(family,) if family is not None else None,
         manipulator_probability=1.0 if manipulators else 0.0,
     )
@@ -199,6 +214,20 @@ def generate_preview(
     )
     path = write_preview_collage(collage, output)
     console.print(
-        f"wrote preview={path} robots={len(collage.robot_ids)} "
-        f"accepted={collage.accepted_count}"
+        f"wrote preview={path} robots={len(collage.robot_ids)} accepted={collage.accepted_count}"
+    )
+
+
+def _generation_config(
+    *,
+    preset: ParameterRangePreset,
+    allowed_families: tuple[RobotFamily, ...] | None = None,
+    require_mjx: bool = False,
+    manipulator_probability: float = 0.0,
+) -> RobotGenerationConfig:
+    return RobotGenerationConfig.from_preset(
+        preset,
+        allowed_families=allowed_families,
+        require_mjx=require_mjx,
+        manipulator_probability=manipulator_probability,
     )

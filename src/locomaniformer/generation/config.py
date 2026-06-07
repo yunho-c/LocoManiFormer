@@ -15,6 +15,7 @@ class RobotFamily(StrEnum):
 
 
 class ParameterRangePreset(StrEnum):
+    COMMERCIAL_SURROGATE = "commercial_surrogate"
     CONSERVATIVE = "conservative"
     BROAD = "broad"
     EXTREME = "extreme"
@@ -36,7 +37,7 @@ class RobotGenerationConfig:
         RobotFamily.WHEELED_QUADRUPED,
     )
     global_scale_range: tuple[float, float] = (0.8, 1.25)
-    parameter_range_preset: ParameterRangePreset = ParameterRangePreset.CONSERVATIVE
+    parameter_range_preset: ParameterRangePreset = ParameterRangePreset.COMMERCIAL_SURROGATE
     validation_strictness: ValidationStrictness = ValidationStrictness.STANDARD
     require_mjx: bool = False
     dataset_split: str = "train"
@@ -56,8 +57,27 @@ class RobotGenerationConfig:
         require_mjx: bool = False,
         manipulator_probability: float = 0.0,
     ) -> RobotGenerationConfig:
+        return cls.from_preset(
+            ParameterRangePreset.COMMERCIAL_SURROGATE,
+            allowed_families=allowed_families,
+            require_mjx=require_mjx,
+            manipulator_probability=manipulator_probability,
+        )
+
+    @classmethod
+    def from_preset(
+        cls,
+        preset: ParameterRangePreset | str,
+        *,
+        allowed_families: tuple[RobotFamily, ...] | None = None,
+        require_mjx: bool = False,
+        manipulator_probability: float = 0.0,
+    ) -> RobotGenerationConfig:
+        range_preset = ParameterRangePreset(preset)
+        default = cls()
         return cls(
-            allowed_families=allowed_families or cls().allowed_families,
+            allowed_families=allowed_families or default.allowed_families,
+            parameter_range_preset=range_preset,
             require_mjx=require_mjx,
             manipulator_probability=manipulator_probability,
         )

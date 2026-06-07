@@ -4,7 +4,11 @@ from dataclasses import replace
 
 import numpy as np
 
-from locomaniformer.generation.config import RobotFamily, RobotGenerationConfig
+from locomaniformer.generation.config import (
+    ParameterRangePreset,
+    RobotFamily,
+    RobotGenerationConfig,
+)
 from locomaniformer.generation.specs import (
     ActuationSpec,
     BodySpec,
@@ -44,9 +48,7 @@ class RobotFamilySampler:
         wheels = tuple(limb.wheel for limb in limbs if limb.wheel is not None)
         symmetry = SymmetrySpec(
             mirrored=True,
-            perturbation_scale=0.025
-            if self.config.parameter_range_preset == "conservative"
-            else 0.06,
+            perturbation_scale=self._symmetry_perturbation_scale(),
             groups=tuple(sorted({limb.symmetry_group for limb in limbs})),
         )
 
@@ -143,11 +145,7 @@ class RobotFamilySampler:
     ) -> tuple[LimbSpec, ...]:
         is_quad = family in (RobotFamily.QUADRUPED, RobotFamily.WHEELED_QUADRUPED)
         is_wheeled = family in (RobotFamily.WHEELED_BIPED, RobotFamily.WHEELED_QUADRUPED)
-        templates = ("hip_roll", "hip_pitch", "knee_pitch")
-        if rng.random() > 0.45:
-            templates = ("hip_yaw",) + templates
-        if not is_wheeled and rng.random() > 0.7:
-            templates = templates + ("ankle_pitch",)
+        templates = self._leg_joint_templates(rng, family)
 
         x_positions = (-body.length * 0.28, body.length * 0.28) if is_quad else (0.0,)
         y_positions = (-body.width * 0.62, body.width * 0.62)
@@ -189,6 +187,51 @@ class RobotFamilySampler:
                     )
                 )
         return tuple(limbs)
+
+    def _leg_joint_templates(
+        self,
+        rng: np.random.Generator,
+        family: RobotFamily,
+    ) -> tuple[str, ...]:
+        is_quad = family in (RobotFamily.QUADRUPED, RobotFamily.WHEELED_QUADRUPED)
+        is_wheeled = family in (RobotFamily.WHEELED_BIPED, RobotFamily.WHEELED_QUADRUPED)
+        preset = self.config.parameter_range_preset
+
+        if preset == ParameterRangePreset.COMMERCIAL_SURROGATE:
+            if is_quad:
+                return ("hip_roll", "hip_pitch", "knee_pitch")
+            if is_wheeled:
+                return ("hip_yaw", "hip_roll", "hip_pitch", "knee_pitch")
+            return ("hip_yaw", "hip_roll", "hip_pitch", "knee_pitch", "ankle_pitch")
+
+        templates = ("hip_roll", "hip_pitch", "knee_pitch")
+        if preset in (
+            ParameterRangePreset.BROAD,
+            ParameterRangePreset.HELDOUT,
+            ParameterRangePreset.EXTREME,
+        ):
+            if rng.random() > (0.7 if is_quad else 0.35):
+                templates = ("hip_yaw",) + templates
+            if not is_wheeled and rng.random() > (0.8 if is_quad else 0.45):
+                templates = templates + ("ankle_pitch",)
+            return templates
+
+        if rng.random() > 0.45:
+            templates = ("hip_yaw",) + templates
+        if not is_wheeled and rng.random() > 0.7:
+            templates = templates + ("ankle_pitch",)
+        return templates
+
+    def _symmetry_perturbation_scale(self) -> float:
+        match self.config.parameter_range_preset:
+            case ParameterRangePreset.COMMERCIAL_SURROGATE | ParameterRangePreset.CONSERVATIVE:
+                return 0.025
+            case ParameterRangePreset.BROAD:
+                return 0.06
+            case ParameterRangePreset.HELDOUT:
+                return 0.09
+            case ParameterRangePreset.EXTREME:
+                return 0.12
 
     def _joint_for(self, template: str, physics: PhysicsSpec) -> JointSpec:
         axes = {

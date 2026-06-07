@@ -4,6 +4,7 @@ from dataclasses import replace
 
 from locomaniformer.generation import (
     MorphologyValidator,
+    ParameterRangePreset,
     RobotFamily,
     RobotFamilySampler,
     RobotGenerationConfig,
@@ -11,6 +12,7 @@ from locomaniformer.generation import (
     generate_robot_artifact,
     write_preview_collage,
 )
+from locomaniformer.generation.mjcf_robot import MJCFGeneratedRobot
 
 
 def test_sampler_reproducibility_and_stable_ids() -> None:
@@ -40,6 +42,53 @@ def test_every_family_generates_valid_native_mujoco_artifact() -> None:
         assert len(artifact.action_descriptor) == artifact.summary_statistics["actuator_count"]
         assert len(artifact.observation_descriptor) == len(artifact.morphology_spec.sensors)
         assert artifact.summary_statistics["limb_count"] in {2, 4}
+
+
+def test_default_quadruped_uses_commercial_twelve_actuator_layout() -> None:
+    artifact = generate_robot_artifact(
+        RobotGenerationConfig.conservative(),
+        seed=12,
+        family=RobotFamily.QUADRUPED,
+    )
+
+    assert artifact.validation_result.accepted, artifact.validation_result.reasons
+    assert (
+        artifact.morphology_spec.config_hash == RobotGenerationConfig.conservative().stable_hash()
+    )
+    assert artifact.morphology_spec.actuation.actuator_type == "motor"
+    assert artifact.summary_statistics["actuator_count"] == 12
+    assert {len(limb.joints) for limb in artifact.morphology_spec.limbs} == {3}
+
+
+def test_default_biped_uses_commercial_ten_actuator_layout() -> None:
+    artifact = generate_robot_artifact(
+        RobotGenerationConfig.conservative(),
+        seed=13,
+        family=RobotFamily.BIPED,
+    )
+
+    assert artifact.validation_result.accepted, artifact.validation_result.reasons
+    assert artifact.summary_statistics["actuator_count"] == 10
+    assert {len(limb.joints) for limb in artifact.morphology_spec.limbs} == {5}
+
+
+def test_default_leg_joints_are_hinges_not_ball_joints() -> None:
+    spec = RobotFamilySampler(RobotGenerationConfig.conservative()).sample(
+        seed=14,
+        family=RobotFamily.QUADRUPED,
+    )
+    xml = MJCFGeneratedRobot(spec).get_mjcf_str()
+
+    assert 'type="ball"' not in xml
+    assert 'type="hinge"' in xml
+
+
+def test_explicit_conservative_preset_remains_available() -> None:
+    config = RobotGenerationConfig.from_preset(ParameterRangePreset.CONSERVATIVE)
+    spec = RobotFamilySampler(config).sample(seed=15, family=RobotFamily.QUADRUPED)
+
+    assert spec.config_hash == config.stable_hash()
+    assert spec.source_ranges["limbs"] == ParameterRangePreset.CONSERVATIVE.value
 
 
 def test_wheel_robot_exposes_wheel_velocity_observations() -> None:

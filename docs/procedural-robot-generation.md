@@ -11,7 +11,9 @@ attachments while remaining physically plausible enough for large-scale RL.
 The target is not a single benchmark robot. The target is an embodiment factory:
 given a seed and a generation configuration, it should produce a reproducible
 robot asset, metadata describing the embodiment, and validation results that say
-whether the robot is suitable for training.
+whether the robot is suitable for training. The default distribution is a
+commercial-surrogate distribution: it should cover the design space of common
+commercial quadruped and biped platforms rather than arbitrary abstract robots.
 
 This document specifies a MooJoCo-based architecture for generating:
 
@@ -76,7 +78,8 @@ It should include:
 - allowed robot families,
 - allowed manipulator configurations,
 - global scale range,
-- parameter range preset: `conservative`, `broad`, `extreme`, or `heldout`,
+- parameter range preset: `commercial_surrogate`, `conservative`, `broad`,
+  `extreme`, or `heldout`,
 - validation strictness,
 - MJX compatibility requirement,
 - dataset split label,
@@ -176,7 +179,8 @@ per-leg perturbations.
 Each leg should support:
 
 - hip mount offset from torso frame,
-- optional yaw, roll, and pitch hip joints,
+- optional yaw, roll, and pitch hip axes modeled as stacked hinge/revolute
+  joints,
 - upper segment length, radius, mass, and COM offset,
 - knee joint axis, range, stiffness, damping, and armature,
 - lower segment length, radius, mass, and COM offset,
@@ -184,16 +188,29 @@ Each leg should support:
 - contact geometry,
 - and actuator strength scaled by segment size and robot mass.
 
-Initial v1 leg templates:
+Initial v1 commercial-surrogate leg templates:
+
+- Quadruped leg: hip roll/abduction, hip pitch, and knee pitch.
+- Biped leg: hip yaw, hip roll, hip pitch, knee pitch, and ankle pitch.
+- Wheeled biped leg: hip yaw, hip roll, hip pitch, knee pitch, and distal wheel
+  drive.
+
+These templates intentionally avoid actuated ball joints. Commercial robots
+usually approximate multi-axis hip motion with multiple single-axis actuators,
+transmissions, and bearings; the generated MJCF should model those axes as
+separate hinge joints.
+
+Broader non-default presets can include:
 
 - 2-DoF leg: hip pitch and knee pitch.
 - 3-DoF leg: hip roll, hip pitch, knee pitch.
 - 4-DoF leg: hip yaw, hip roll, hip pitch, knee pitch.
 - 5-DoF leg: 4-DoF leg plus ankle pitch.
 
-The sampler should choose leg templates per family, then apply small
-left/right/front/back perturbations. Large asymmetry should be allowed only in
-held-out or extreme presets.
+The default sampler should choose commercial-surrogate templates per family,
+then apply small left/right/front/back perturbations. Large asymmetry and
+unusual extra axes should be allowed only in `broad`, `heldout`, or `extreme`
+presets.
 
 ### Feet
 
@@ -516,6 +533,7 @@ For the first implementation, choose conservative defaults:
 
 - primitive geoms only,
 - hinge joints only,
+- no actuated ball joints,
 - direct motor or position actuators,
 - flat-ground validation,
 - simple collision shapes,

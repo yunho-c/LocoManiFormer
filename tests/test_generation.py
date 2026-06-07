@@ -7,7 +7,9 @@ from locomaniformer.generation import (
     RobotFamily,
     RobotFamilySampler,
     RobotGenerationConfig,
+    create_preview_collage,
     generate_robot_artifact,
+    write_preview_collage,
 )
 
 
@@ -95,3 +97,21 @@ def test_artifact_write_outputs_json_and_xml(tmp_path) -> None:
     assert paths["metadata"].exists()
     assert paths["validation"].exists()
     assert paths["mjcf"].read_text(encoding="utf-8").startswith("<mujoco")
+
+
+def test_preview_collage_renders_regular_grid(tmp_path) -> None:
+    collage = create_preview_collage(
+        RobotGenerationConfig.conservative(allowed_families=(RobotFamily.BIPED,)),
+        count=2,
+        start_seed=0,
+        family=RobotFamily.BIPED,
+        columns=2,
+        cell_size=96,
+        padding=4,
+    )
+    output = write_preview_collage(collage, tmp_path / "preview.png")
+
+    assert output.exists()
+    assert collage.image.shape == (104, 204, 3)
+    assert collage.image.max() > collage.image.min()
+    assert collage.accepted_count == 2

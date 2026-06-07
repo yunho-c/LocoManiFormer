@@ -12,7 +12,9 @@ from locomaniformer import __version__
 from locomaniformer.generation import (
     RobotFamily,
     RobotGenerationConfig,
+    create_preview_collage,
     generate_robot_artifact,
+    write_preview_collage,
 )
 from locomaniformer.generation.artifacts import write_manifest
 
@@ -142,3 +144,61 @@ def generate_manifest(
     accepted = sum(artifact.validation_result.accepted for artifact in artifacts)
     console.print(f"wrote {len(artifacts)} robots ({accepted} accepted) to {output}")
     console.print(f"manifest={manifest_path}")
+
+
+@generate_app.command("preview")
+def generate_preview(
+    count: Annotated[
+        int,
+        typer.Option("--count", min=1, help="Number of robots to render."),
+    ] = 8,
+    start_seed: Annotated[
+        int,
+        typer.Option("--start-seed", help="First deterministic seed."),
+    ] = 0,
+    family: Annotated[
+        RobotFamily | None,
+        typer.Option("--family", help="Robot family to render."),
+    ] = None,
+    output: Annotated[
+        Path,
+        typer.Option(
+            "--output",
+            "-o",
+            help="PNG path for the preview collage.",
+        ),
+    ] = Path("artifacts/preview.png"),
+    columns: Annotated[
+        int | None,
+        typer.Option("--columns", min=1, help="Grid columns. Defaults to a square-ish grid."),
+    ] = None,
+    cell_size: Annotated[
+        int,
+        typer.Option("--cell-size", min=64, help="Rendered pixel size for each robot cell."),
+    ] = 256,
+    manipulators: Annotated[
+        bool,
+        typer.Option(
+            "--manipulators",
+            help="Allow simple torso-mounted manipulators in generated robots.",
+        ),
+    ] = False,
+) -> None:
+    """Render generated robots into a regular-grid PNG collage."""
+    config = RobotGenerationConfig.conservative(
+        allowed_families=(family,) if family is not None else None,
+        manipulator_probability=1.0 if manipulators else 0.0,
+    )
+    collage = create_preview_collage(
+        config,
+        count=count,
+        start_seed=start_seed,
+        family=family,
+        columns=columns,
+        cell_size=cell_size,
+    )
+    path = write_preview_collage(collage, output)
+    console.print(
+        f"wrote preview={path} robots={len(collage.robot_ids)} "
+        f"accepted={collage.accepted_count}"
+    )

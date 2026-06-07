@@ -22,6 +22,12 @@ def test_sampler_reproducibility_and_stable_ids() -> None:
     assert first.to_dict() == second.to_dict()
 
 
+def test_sampler_random_family_keeps_enum_type() -> None:
+    spec = RobotFamilySampler(RobotGenerationConfig.conservative()).sample(seed=0)
+
+    assert isinstance(spec.family, RobotFamily)
+
+
 def test_every_family_generates_valid_native_mujoco_artifact() -> None:
     config = RobotGenerationConfig.conservative()
 

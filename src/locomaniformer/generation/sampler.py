@@ -91,7 +91,8 @@ class RobotFamilySampler:
                 msg = f"{requested.value!r} is not allowed by the generation config"
                 raise ValueError(msg)
             return requested
-        return rng.choice(self.config.allowed_families).item()
+        family_index = int(rng.integers(0, len(self.config.allowed_families)))
+        return self.config.allowed_families[family_index]
 
     def _sample_body(self, rng: np.random.Generator, scale: float) -> BodySpec:
         length = self._uniform(rng, 0.42, 0.82) * scale

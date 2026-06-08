@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
 import xml.etree.ElementTree as ET
 from collections.abc import Iterable
+from pathlib import Path
 
 import mujoco
 import numpy as np
@@ -129,6 +132,106 @@ def optimize_bootstrap_controllers(
     return tuple(controllers)
 
 
+def render_bootstrap_preview(
+    artifact: GeneratedRobotArtifact,
+    controller: BootstrapControllerArtifact,
+    output_path: Path | str,
+    *,
+    duration: float = 10.0,
+    fps: int = 30,
+    width: int = 640,
+    height: int = 480,
+) -> Path:
+    if duration <= 0.0:
+        raise ValueError("duration must be positive")
+    if fps <= 0:
+        raise ValueError("fps must be positive")
+    if width <= 0 or height <= 0:
+        raise ValueError("width and height must be positive")
+    if width % 2 != 0 or height % 2 != 0:
+        raise ValueError("width and height must be even for MP4 encoding")
+
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        msg = "ffmpeg is required for --render-preview but was not found on PATH"
+        raise RuntimeError(msg)
+
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    model = _compile_bootstrap_model(artifact)
+    data = mujoco.MjData(model)
+    mujoco.mj_resetData(model, data)
+    mujoco.mj_forward(model, data)
+    mapper = CPGActionMapper.from_artifact(artifact)
+    parameters = CPGParameters.from_dict(controller.parameters)
+    control_timestep = float(
+        controller.evaluation_summary.get(
+            "control_timestep",
+            BootstrapControllerConfig().control_timestep,
+        )
+    )
+    cpg = CPG(parameters, dt=control_timestep)
+    cpg_state = cpg.reset()
+    n_substeps = max(1, int(round(control_timestep / model.opt.timestep)))
+    frame_count = max(1, int(round(duration * fps)))
+    renderer = mujoco.Renderer(model, height=height, width=width)
+    camera = _rollout_camera(model, data)
+
+    command = [
+        ffmpeg,
+        "-y",
+        "-f",
+        "rawvideo",
+        "-vcodec",
+        "rawvideo",
+        "-pix_fmt",
+        "rgb24",
+        "-s",
+        f"{width}x{height}",
+        "-r",
+        str(fps),
+        "-i",
+        "-",
+        "-an",
+        "-vcodec",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        str(path),
+    ]
+    process = subprocess.Popen(
+        command,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+    assert process.stdin is not None
+    try:
+        for frame_index in range(frame_count):
+            target_time = (frame_index + 1) / fps
+            while data.time < target_time:
+                cpg_state = cpg.step(cpg_state)
+                data.ctrl[:] = mapper.action(cpg_state)
+                mujoco.mj_step(model, data, nstep=n_substeps)
+            _update_rollout_camera(camera, model, data)
+            renderer.update_scene(data, camera=camera)
+            process.stdin.write(renderer.render().tobytes())
+    except BrokenPipeError as exc:
+        stderr = _finish_ffmpeg(process)
+        msg = f"ffmpeg stopped while writing {path}: {stderr}"
+        raise RuntimeError(msg) from exc
+    finally:
+        renderer.close()
+
+    stderr = _finish_ffmpeg(process)
+    if process.returncode != 0:
+        msg = f"ffmpeg failed while writing {path}: {stderr}"
+        raise RuntimeError(msg)
+    return path
+
+
 def _mutate_parameters(parameters: CPGParameters, rng: np.random.Generator) -> CPGParameters:
     mutated = parameters.copy()
     amplitudes = np.clip(
@@ -205,6 +308,7 @@ def _evaluate(
         "final_torso_height": final_z,
         "simulated_time": float(data.time),
         "steps": simulated_steps,
+        "control_timestep": config.control_timestep,
     }
 
 
@@ -252,3 +356,36 @@ def _limb_phase(family_role: str) -> float:
         "mid_right": np.pi,
     }
     return phases.get(family_role, 0.0)
+
+
+def _rollout_camera(model: mujoco.MjModel, data: mujoco.MjData) -> mujoco.MjvCamera:
+    camera = mujoco.MjvCamera()
+    camera.type = mujoco.mjtCamera.mjCAMERA_FREE
+    camera.distance = 3.0
+    camera.azimuth = 135.0
+    camera.elevation = -18.0
+    _update_rollout_camera(camera, model, data)
+    return camera
+
+
+def _update_rollout_camera(
+    camera: mujoco.MjvCamera,
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+) -> None:
+    torso_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "torso")
+    torso_pos = data.xpos[torso_id]
+    camera.lookat = [
+        float(torso_pos[0]),
+        float(torso_pos[1]),
+        max(0.2, float(torso_pos[2]) * 0.65),
+    ]
+    camera.distance = max(2.5, float(torso_pos[2]) * 3.0)
+
+
+def _finish_ffmpeg(process: subprocess.Popen[bytes]) -> str:
+    if process.stdin is not None:
+        process.stdin.close()
+        process.stdin = None
+    _, stderr = process.communicate()
+    return stderr.decode("utf-8", errors="replace").strip()

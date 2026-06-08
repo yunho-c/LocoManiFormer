@@ -100,13 +100,15 @@ pixi run locomaniformer bootstrap controller \
   --output artifacts/controllers \
   --seed 0 \
   --candidates 32 \
-  --horizon 1.5
+  --horizon 1.5 \
+  --render-preview
 ```
 
 The command writes:
 
 ```text
 artifacts/controllers/<robot_id>/controller.json
+artifacts/controllers/<robot_id>/preview.mp4
 ```
 
 To create controllers for every accepted robot in a generated manifest, run:
@@ -125,6 +127,8 @@ The manifest command preserves manifest order, uses `--seed` as the base search
 seed, increments the seed once per processed robot, and writes one
 `controller.json` under `artifacts/controllers/<robot_id>/`. Rejected robots are
 skipped by default; pass `--include-rejected` to process every manifest row.
+Pass `--render-preview` to also write a 10-second `preview.mp4` for each
+controller.
 
 The bootstrap layer:
 
@@ -133,7 +137,8 @@ The bootstrap layer:
 - holds manipulator actuators at zero by default,
 - runs a short native MuJoCo random search around the heuristic gait,
 - scores candidates by forward displacement minus effort and fall penalties,
-- and serializes the best controller parameters and evaluation summary.
+- serializes the best controller parameters and evaluation summary,
+- and optionally renders the best gait to an MP4 video through system `ffmpeg`.
 
 For a fast smoke test, use a tiny search:
 
@@ -144,8 +149,8 @@ pixi run locomaniformer bootstrap controller \
   --horizon 0.04
 ```
 
-`--render-preview` is accepted by the CLI for future rollout video support, but
-currently the bootstrap command writes JSON only.
+Preview rendering requires `ffmpeg` on `PATH`. The default preview is a
+10-second, 30 FPS, 640x480 MP4 rollout of the best optimized gait.
 
 ## Development
 

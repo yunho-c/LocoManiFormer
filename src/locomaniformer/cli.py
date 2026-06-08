@@ -15,6 +15,7 @@ from locomaniformer.control import (
     load_manifest_generated_robot_artifacts,
     optimize_bootstrap_controller,
     optimize_bootstrap_controllers,
+    render_bootstrap_preview,
 )
 from locomaniformer.generation import (
     ParameterRangePreset,
@@ -267,7 +268,7 @@ def bootstrap_controller(
         bool,
         typer.Option(
             "--render-preview",
-            help="Reserved for future rollout video previews; currently writes JSON only.",
+            help="Render a 10-second MP4 rollout with the best optimized gait.",
         ),
     ] = False,
 ) -> None:
@@ -283,8 +284,13 @@ def bootstrap_controller(
     controller = optimize_bootstrap_controller(artifact, config)
     path = controller.write(output)
     summary = controller.evaluation_summary
+    preview_path = None
     if render_preview:
-        console.print("[yellow]--render-preview is reserved; wrote controller JSON only.[/yellow]")
+        preview_path = render_bootstrap_preview(
+            artifact,
+            controller,
+            path.parent / "preview.mp4",
+        )
     console.print(f"{controller.robot_id}: controller score={controller.score:.4f}")
     console.print(
         "displacement={disp:.4f} effort={effort:.4f} fell={fell} artifact={path}".format(
@@ -294,6 +300,8 @@ def bootstrap_controller(
             path=path,
         )
     )
+    if preview_path is not None:
+        console.print(f"preview={preview_path}")
 
 
 @bootstrap_app.command("manifest")
@@ -343,6 +351,13 @@ def bootstrap_manifest(
         bool,
         typer.Option("--include-rejected", help="Also process rejected robots from the manifest."),
     ] = False,
+    render_preview: Annotated[
+        bool,
+        typer.Option(
+            "--render-preview",
+            help="Render a 10-second MP4 rollout for every generated controller.",
+        ),
+    ] = False,
 ) -> None:
     """Create CPG bootstrap controllers for every robot in a manifest."""
     artifacts = load_manifest_generated_robot_artifacts(
@@ -361,19 +376,27 @@ def bootstrap_manifest(
         objective=objective,
     )
     controllers = optimize_bootstrap_controllers(artifacts, config)
-    for controller in controllers:
+    for artifact, controller in zip(artifacts, controllers, strict=True):
         path = controller.write(output)
         summary = controller.evaluation_summary
+        preview_path = None
+        if render_preview:
+            preview_path = render_bootstrap_preview(
+                artifact,
+                controller,
+                path.parent / "preview.mp4",
+            )
         console.print(
             (
                 "{robot_id}: score={score:.4f} displacement={disp:.4f} "
-                "fell={fell} artifact={path}"
+                "fell={fell} artifact={path}{preview}"
             ).format(
                 robot_id=controller.robot_id,
                 score=controller.score,
                 disp=summary["forward_displacement"],
                 fell=summary["fell"],
                 path=path,
+                preview=f" preview={preview_path}" if preview_path is not None else "",
             )
         )
     console.print(f"wrote {len(controllers)} controller artifacts to {output}")

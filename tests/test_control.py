@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import shutil
+
 import numpy as np
+import pytest
 
 from locomaniformer.control import (
     CPG,
@@ -11,6 +14,7 @@ from locomaniformer.control import (
     load_manifest_generated_robot_artifacts,
     optimize_bootstrap_controller,
     optimize_bootstrap_controllers,
+    render_bootstrap_preview,
 )
 from locomaniformer.generation import (
     RobotFamily,
@@ -35,6 +39,24 @@ def test_cpg_step_is_deterministic_for_fixed_parameters() -> None:
 
     np.testing.assert_allclose(first.phases, second.phases)
     np.testing.assert_allclose(first.outputs, second.outputs)
+
+
+def test_cpg_parameters_round_trip_from_dict() -> None:
+    parameters = CPGParameters(
+        amplitudes=np.array([0.5, 0.25]),
+        offsets=np.array([0.0, 0.1]),
+        frequencies=np.array([1.0, 2.0]),
+        phase_biases=np.zeros((2, 2)),
+        coupling_weights=np.ones((2, 2)),
+    )
+
+    restored = CPGParameters.from_dict(parameters.to_dict())
+
+    np.testing.assert_allclose(restored.amplitudes, parameters.amplitudes)
+    np.testing.assert_allclose(restored.offsets, parameters.offsets)
+    np.testing.assert_allclose(restored.frequencies, parameters.frequencies)
+    np.testing.assert_allclose(restored.phase_biases, parameters.phase_biases)
+    np.testing.assert_allclose(restored.coupling_weights, parameters.coupling_weights)
 
 
 def test_action_mapper_clips_outputs_and_orders_by_action_descriptor() -> None:
@@ -143,6 +165,33 @@ def test_batch_bootstrap_controllers_use_manifest_ordered_seed_offsets(tmp_path)
     ]
     assert [controller.seed for controller in controllers] == [10, 11]
     assert all(path.exists() for path in paths)
+
+
+def test_bootstrap_preview_writes_mp4_when_ffmpeg_available(tmp_path) -> None:
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg is not installed")
+    artifact = generate_robot_artifact(
+        RobotGenerationConfig.conservative(),
+        seed=28,
+        family=RobotFamily.WHEELED_BIPED,
+    )
+    controller = optimize_bootstrap_controller(
+        artifact,
+        BootstrapControllerConfig(seed=2, candidates=1, horizon=0.02),
+    )
+
+    path = render_bootstrap_preview(
+        artifact,
+        controller,
+        tmp_path / "preview.mp4",
+        duration=0.2,
+        fps=5,
+        width=160,
+        height=120,
+    )
+
+    assert path.exists()
+    assert path.stat().st_size > 0
 
 
 def cpg_state(outputs: np.ndarray):

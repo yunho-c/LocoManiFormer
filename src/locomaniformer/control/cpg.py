@@ -25,6 +25,16 @@ class CPGParameters:
             coupling_weights=self.coupling_weights.copy(),
         )
 
+    @classmethod
+    def from_dict(cls, payload: dict[str, object]) -> CPGParameters:
+        return cls(
+            amplitudes=np.asarray(payload["amplitudes"], dtype=np.float64),
+            offsets=np.asarray(payload["offsets"], dtype=np.float64),
+            frequencies=np.asarray(payload["frequencies"], dtype=np.float64),
+            phase_biases=np.asarray(payload["phase_biases"], dtype=np.float64),
+            coupling_weights=np.asarray(payload["coupling_weights"], dtype=np.float64),
+        )
+
     def to_dict(self) -> dict[str, list[float] | list[list[float]]]:
         return {
             "amplitudes": self.amplitudes.tolist(),

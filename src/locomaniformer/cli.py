@@ -9,6 +9,11 @@ import typer
 from rich.console import Console
 
 from locomaniformer import __version__
+from locomaniformer.control import (
+    BootstrapControllerConfig,
+    load_generated_robot_artifact,
+    optimize_bootstrap_controller,
+)
 from locomaniformer.generation import (
     ParameterRangePreset,
     RobotFamily,
@@ -24,7 +29,9 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 generate_app = typer.Typer(help="Generate procedural robot artifacts.", no_args_is_help=True)
+bootstrap_app = typer.Typer(help="Create bootstrap controller artifacts.", no_args_is_help=True)
 app.add_typer(generate_app, name="generate")
+app.add_typer(bootstrap_app, name="bootstrap")
 console = Console()
 
 
@@ -215,6 +222,75 @@ def generate_preview(
     path = write_preview_collage(collage, output)
     console.print(
         f"wrote preview={path} robots={len(collage.robot_ids)} accepted={collage.accepted_count}"
+    )
+
+
+@bootstrap_app.command("controller")
+def bootstrap_controller(
+    robot_artifact: Annotated[
+        Path,
+        typer.Option(
+            "--robot-artifact",
+            help="Path to a generated robot artifact.json file.",
+            exists=True,
+            dir_okay=False,
+        ),
+    ],
+    output: Annotated[
+        Path,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Directory where the controller artifact folder should be written.",
+        ),
+    ] = Path("artifacts/controllers"),
+    seed: Annotated[int, typer.Option("--seed", help="Deterministic search seed.")] = 0,
+    candidates: Annotated[
+        int,
+        typer.Option("--candidates", min=1, help="Number of random-search candidates."),
+    ] = 32,
+    horizon: Annotated[
+        float,
+        typer.Option("--horizon", min=0.02, help="Evaluation horizon in seconds."),
+    ] = 1.5,
+    effort_penalty: Annotated[
+        float,
+        typer.Option("--effort-penalty", min=0.0, help="Mean squared action penalty weight."),
+    ] = 0.01,
+    objective: Annotated[
+        str,
+        typer.Option("--objective", help="Bootstrap objective label."),
+    ] = "forward",
+    render_preview: Annotated[
+        bool,
+        typer.Option(
+            "--render-preview",
+            help="Reserved for future rollout video previews; currently writes JSON only.",
+        ),
+    ] = False,
+) -> None:
+    """Create a CPG bootstrap controller for a generated robot artifact."""
+    artifact = load_generated_robot_artifact(robot_artifact)
+    config = BootstrapControllerConfig(
+        seed=seed,
+        candidates=candidates,
+        horizon=horizon,
+        effort_penalty=effort_penalty,
+        objective=objective,
+    )
+    controller = optimize_bootstrap_controller(artifact, config)
+    path = controller.write(output)
+    summary = controller.evaluation_summary
+    if render_preview:
+        console.print("[yellow]--render-preview is reserved; wrote controller JSON only.[/yellow]")
+    console.print(f"{controller.robot_id}: controller score={controller.score:.4f}")
+    console.print(
+        "displacement={disp:.4f} effort={effort:.4f} fell={fell} artifact={path}".format(
+            disp=summary["forward_displacement"],
+            effort=summary["mean_control_effort"],
+            fell=summary["fell"],
+            path=path,
+        )
     )
 
 

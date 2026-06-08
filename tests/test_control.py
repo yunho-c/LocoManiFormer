@@ -1,0 +1,96 @@
+from __future__ import annotations
+
+import numpy as np
+
+from locomaniformer.control import (
+    CPG,
+    BootstrapControllerConfig,
+    CPGActionMapper,
+    CPGParameters,
+    create_heuristic_controller,
+    optimize_bootstrap_controller,
+)
+from locomaniformer.generation import (
+    RobotFamily,
+    RobotGenerationConfig,
+    generate_robot_artifact,
+)
+
+
+def test_cpg_step_is_deterministic_for_fixed_parameters() -> None:
+    parameters = CPGParameters(
+        amplitudes=np.array([0.5, 0.25]),
+        offsets=np.array([0.0, 0.1]),
+        frequencies=np.array([1.0, 2.0]),
+        phase_biases=np.zeros((2, 2)),
+        coupling_weights=np.zeros((2, 2)),
+    )
+    cpg = CPG(parameters, dt=0.1)
+
+    first = cpg.step(cpg.reset())
+    second = cpg.step(cpg.reset())
+
+    np.testing.assert_allclose(first.phases, second.phases)
+    np.testing.assert_allclose(first.outputs, second.outputs)
+
+
+def test_action_mapper_clips_outputs_and_orders_by_action_descriptor() -> None:
+    artifact = generate_robot_artifact(
+        RobotGenerationConfig.conservative(),
+        seed=21,
+        family=RobotFamily.BIPED,
+    )
+    mapper = CPGActionMapper.from_artifact(artifact)
+    outputs = np.full(mapper.oscillator_count, 4.0)
+    state = cpg_state(outputs)
+
+    action = mapper.action(state)
+
+    assert action.shape == (len(artifact.action_descriptor),)
+    assert np.all(action <= 1.0)
+    assert np.all(action >= -1.0)
+
+
+def test_manipulator_actuators_map_to_zero_by_default() -> None:
+    config = RobotGenerationConfig.conservative(
+        allowed_families=(RobotFamily.BIPED,),
+        manipulator_probability=1.0,
+    )
+    artifact = generate_robot_artifact(config, seed=22, family=RobotFamily.BIPED)
+    mapper = CPGActionMapper.from_artifact(artifact)
+    parameters = create_heuristic_controller(artifact)
+    state = CPG(parameters, dt=0.02).step(CPG(parameters, dt=0.02).reset())
+    action = mapper.action(state)
+
+    manipulator_indices = [
+        entry.action_index for entry in mapper.entries if entry.family_role == "manipulator"
+    ]
+
+    assert manipulator_indices
+    assert np.all(action[manipulator_indices] == 0.0)
+
+
+def test_bootstrap_controller_serializes_and_links_robot_id(tmp_path) -> None:
+    artifact = generate_robot_artifact(
+        RobotGenerationConfig.conservative(),
+        seed=23,
+        family=RobotFamily.WHEELED_BIPED,
+    )
+    controller = optimize_bootstrap_controller(
+        artifact,
+        BootstrapControllerConfig(seed=1, candidates=2, horizon=0.04),
+    )
+
+    path = controller.write(tmp_path)
+
+    assert path.exists()
+    assert controller.robot_id == artifact.robot_id
+    assert controller.evaluation_summary["steps"] >= 1
+    assert "amplitudes" in controller.parameters
+    assert controller.action_mapping
+
+
+def cpg_state(outputs: np.ndarray):
+    from locomaniformer.control.cpg import CPGState
+
+    return CPGState(time=0.0, phases=np.zeros_like(outputs), outputs=outputs)

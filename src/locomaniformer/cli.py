@@ -12,7 +12,9 @@ from locomaniformer import __version__
 from locomaniformer.control import (
     BootstrapControllerConfig,
     load_generated_robot_artifact,
+    load_manifest_generated_robot_artifacts,
     optimize_bootstrap_controller,
+    optimize_bootstrap_controllers,
 )
 from locomaniformer.generation import (
     ParameterRangePreset,
@@ -292,6 +294,89 @@ def bootstrap_controller(
             path=path,
         )
     )
+
+
+@bootstrap_app.command("manifest")
+def bootstrap_manifest(
+    manifest: Annotated[
+        Path,
+        typer.Option(
+            "--manifest",
+            help="JSONL robot manifest produced by `generate manifest`.",
+            exists=True,
+            dir_okay=False,
+        ),
+    ] = Path("artifacts/manifest.jsonl"),
+    robot_root: Annotated[
+        Path,
+        typer.Option(
+            "--robot-root",
+            help="Directory containing generated robot artifact folders.",
+        ),
+    ] = Path("artifacts/robots"),
+    output: Annotated[
+        Path,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Directory where controller artifact folders should be written.",
+        ),
+    ] = Path("artifacts/controllers"),
+    seed: Annotated[int, typer.Option("--seed", help="Base deterministic search seed.")] = 0,
+    candidates: Annotated[
+        int,
+        typer.Option("--candidates", min=1, help="Number of random-search candidates per robot."),
+    ] = 32,
+    horizon: Annotated[
+        float,
+        typer.Option("--horizon", min=0.02, help="Evaluation horizon in seconds."),
+    ] = 1.5,
+    effort_penalty: Annotated[
+        float,
+        typer.Option("--effort-penalty", min=0.0, help="Mean squared action penalty weight."),
+    ] = 0.01,
+    objective: Annotated[
+        str,
+        typer.Option("--objective", help="Bootstrap objective label."),
+    ] = "forward",
+    include_rejected: Annotated[
+        bool,
+        typer.Option("--include-rejected", help="Also process rejected robots from the manifest."),
+    ] = False,
+) -> None:
+    """Create CPG bootstrap controllers for every robot in a manifest."""
+    artifacts = load_manifest_generated_robot_artifacts(
+        manifest,
+        robot_root,
+        include_rejected=include_rejected,
+    )
+    if not artifacts:
+        console.print("[yellow]manifest contained no robots to process[/yellow]")
+        return
+    config = BootstrapControllerConfig(
+        seed=seed,
+        candidates=candidates,
+        horizon=horizon,
+        effort_penalty=effort_penalty,
+        objective=objective,
+    )
+    controllers = optimize_bootstrap_controllers(artifacts, config)
+    for controller in controllers:
+        path = controller.write(output)
+        summary = controller.evaluation_summary
+        console.print(
+            (
+                "{robot_id}: score={score:.4f} displacement={disp:.4f} "
+                "fell={fell} artifact={path}"
+            ).format(
+                robot_id=controller.robot_id,
+                score=controller.score,
+                disp=summary["forward_displacement"],
+                fell=summary["fell"],
+                path=path,
+            )
+        )
+    console.print(f"wrote {len(controllers)} controller artifacts to {output}")
 
 
 def _generation_config(

@@ -8,13 +8,16 @@ from locomaniformer.control import (
     CPGActionMapper,
     CPGParameters,
     create_heuristic_controller,
+    load_manifest_generated_robot_artifacts,
     optimize_bootstrap_controller,
+    optimize_bootstrap_controllers,
 )
 from locomaniformer.generation import (
     RobotFamily,
     RobotGenerationConfig,
     generate_robot_artifact,
 )
+from locomaniformer.generation.artifacts import write_manifest
 
 
 def test_cpg_step_is_deterministic_for_fixed_parameters() -> None:
@@ -88,6 +91,58 @@ def test_bootstrap_controller_serializes_and_links_robot_id(tmp_path) -> None:
     assert controller.evaluation_summary["steps"] >= 1
     assert "amplitudes" in controller.parameters
     assert controller.action_mapping
+
+
+def test_manifest_loader_resolves_robot_artifacts(tmp_path) -> None:
+    artifacts = [
+        generate_robot_artifact(
+            RobotGenerationConfig.conservative(),
+            seed=24,
+            family=RobotFamily.BIPED,
+        ),
+        generate_robot_artifact(
+            RobotGenerationConfig.conservative(),
+            seed=25,
+            family=RobotFamily.QUADRUPED,
+        ),
+    ]
+    robot_root = tmp_path / "robots"
+    for artifact in artifacts:
+        artifact.write(robot_root)
+    manifest = tmp_path / "manifest.jsonl"
+    write_manifest(artifacts, manifest)
+
+    loaded = load_manifest_generated_robot_artifacts(manifest, robot_root)
+
+    assert [artifact.robot_id for artifact in loaded] == [
+        artifact.robot_id for artifact in artifacts
+    ]
+
+
+def test_batch_bootstrap_controllers_use_manifest_ordered_seed_offsets(tmp_path) -> None:
+    artifacts = [
+        generate_robot_artifact(
+            RobotGenerationConfig.conservative(),
+            seed=26,
+            family=RobotFamily.WHEELED_BIPED,
+        ),
+        generate_robot_artifact(
+            RobotGenerationConfig.conservative(),
+            seed=27,
+            family=RobotFamily.WHEELED_QUADRUPED,
+        ),
+    ]
+    controllers = optimize_bootstrap_controllers(
+        artifacts,
+        BootstrapControllerConfig(seed=10, candidates=1, horizon=0.02),
+    )
+    paths = [controller.write(tmp_path) for controller in controllers]
+
+    assert [controller.robot_id for controller in controllers] == [
+        artifact.robot_id for artifact in artifacts
+    ]
+    assert [controller.seed for controller in controllers] == [10, 11]
+    assert all(path.exists() for path in paths)
 
 
 def cpg_state(outputs: np.ndarray):

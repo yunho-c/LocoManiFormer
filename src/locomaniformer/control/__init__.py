@@ -4,10 +4,12 @@ from locomaniformer.control.artifacts import (
     BootstrapControllerArtifact,
     BootstrapControllerConfig,
     load_generated_robot_artifact,
+    load_manifest_generated_robot_artifacts,
 )
 from locomaniformer.control.bootstrap import (
     create_heuristic_controller,
     optimize_bootstrap_controller,
+    optimize_bootstrap_controllers,
 )
 from locomaniformer.control.cpg import CPG, CPGParameters, CPGState
 from locomaniformer.control.mapping import CPGActionMapper
@@ -21,5 +23,7 @@ __all__ = [
     "CPGState",
     "create_heuristic_controller",
     "load_generated_robot_artifact",
+    "load_manifest_generated_robot_artifacts",
     "optimize_bootstrap_controller",
+    "optimize_bootstrap_controllers",
 ]

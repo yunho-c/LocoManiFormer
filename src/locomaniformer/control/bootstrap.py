@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
+from collections.abc import Iterable
 
 import mujoco
 import numpy as np
@@ -106,6 +107,26 @@ def optimize_bootstrap_controller(
         score=best_score,
         evaluation_summary=best_summary,
     )
+
+
+def optimize_bootstrap_controllers(
+    artifacts: Iterable[GeneratedRobotArtifact],
+    config: BootstrapControllerConfig,
+) -> tuple[BootstrapControllerArtifact, ...]:
+    controllers: list[BootstrapControllerArtifact] = []
+    for index, artifact in enumerate(artifacts):
+        per_robot_config = BootstrapControllerConfig(
+            seed=config.seed + index,
+            candidates=config.candidates,
+            horizon=config.horizon,
+            effort_penalty=config.effort_penalty,
+            fall_height_threshold=config.fall_height_threshold,
+            controller_version=config.controller_version,
+            control_timestep=config.control_timestep,
+            objective=config.objective,
+        )
+        controllers.append(optimize_bootstrap_controller(artifact, per_robot_config))
+    return tuple(controllers)
 
 
 def _mutate_parameters(parameters: CPGParameters, rng: np.random.Generator) -> CPGParameters:

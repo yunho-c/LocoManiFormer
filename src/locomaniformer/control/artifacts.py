@@ -84,6 +84,41 @@ def load_generated_robot_artifact(path: Path | str) -> GeneratedRobotArtifact:
     )
 
 
+def load_manifest_generated_robot_artifacts(
+    manifest_path: Path | str,
+    robot_root: Path | str,
+    *,
+    include_rejected: bool = False,
+) -> tuple[GeneratedRobotArtifact, ...]:
+    manifest = Path(manifest_path)
+    root = Path(robot_root)
+    artifacts: list[GeneratedRobotArtifact] = []
+    for line_number, line in enumerate(
+        manifest.read_text(encoding="utf-8").splitlines(),
+        start=1,
+    ):
+        if not line.strip():
+            continue
+        entry = json.loads(line)
+        if not include_rejected and not entry.get("accepted", False):
+            continue
+        if "artifact_path" in entry:
+            artifact_path = Path(entry["artifact_path"])
+            if not artifact_path.is_absolute():
+                artifact_path = manifest.parent / artifact_path
+        else:
+            try:
+                artifact_path = root / entry["robot_id"] / "artifact.json"
+            except KeyError as exc:
+                msg = f"manifest line {line_number} has no robot_id or artifact_path"
+                raise ValueError(msg) from exc
+        if not artifact_path.exists():
+            msg = f"manifest line {line_number} artifact does not exist: {artifact_path}"
+            raise FileNotFoundError(msg)
+        artifacts.append(load_generated_robot_artifact(artifact_path))
+    return tuple(artifacts)
+
+
 def _spec_from_dict(payload: dict[str, Any]) -> RobotMorphologySpec:
     limbs = tuple(_limb_from_dict(item) for item in payload["limbs"])
     manipulators = tuple(_manipulator_from_dict(item) for item in payload["manipulators"])

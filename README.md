@@ -109,6 +109,23 @@ The command writes:
 artifacts/controllers/<robot_id>/controller.json
 ```
 
+To create controllers for every accepted robot in a generated manifest, run:
+
+```bash
+pixi run locomaniformer bootstrap manifest \
+  --manifest artifacts/manifest.jsonl \
+  --robot-root artifacts/robots \
+  --output artifacts/controllers \
+  --seed 0 \
+  --candidates 32 \
+  --horizon 1.5
+```
+
+The manifest command preserves manifest order, uses `--seed` as the base search
+seed, increments the seed once per processed robot, and writes one
+`controller.json` under `artifacts/controllers/<robot_id>/`. Rejected robots are
+skipped by default; pass `--include-rejected` to process every manifest row.
+
 The bootstrap layer:
 
 - builds a heuristic CPG from the robot's action descriptors,
